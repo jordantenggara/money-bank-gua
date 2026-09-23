@@ -1,6 +1,6 @@
-# Project Name
+# MBG - Money Bank Gua
 
-MBG - Money Bank Gua
+Your personal money management web
 
 # Overview
 
