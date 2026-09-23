@@ -49,6 +49,22 @@ export async function updateSession(request: NextRequest) {
     !isAuthenticated &&
     !(pathname.startsWith("/login") || pathname.startsWith("/register") || pathname.startsWith("/auth/callback"))
   ) {
+    if (pathname.startsWith("/api/")) {
+      return withSessionCookies(
+        NextResponse.json(
+          {
+            data: null,
+            error: {
+              code: "UNAUTHENTICATED",
+              message: "Authentication is required.",
+            },
+          },
+          { status: 401 },
+        ),
+        response,
+      );
+    }
+
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return withSessionCookies(NextResponse.redirect(url), response);
