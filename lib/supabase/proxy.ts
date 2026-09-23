@@ -41,14 +41,13 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // getClaims verifies the JWT; getSession only reads the unverified cookie.
   const { data } = await supabase.auth.getClaims();
   const isAuthenticated = Boolean(data?.claims?.sub);
   const { pathname } = request.nextUrl;
 
   if (
     !isAuthenticated &&
-    !(pathname.startsWith("/login") || pathname.startsWith("/register"))
+    !(pathname.startsWith("/login") || pathname.startsWith("/register") || pathname.startsWith("/auth/callback"))
   ) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
