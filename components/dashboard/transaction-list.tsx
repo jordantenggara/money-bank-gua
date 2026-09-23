@@ -16,6 +16,7 @@ type TransactionListProps = {
 export function TransactionList({ transactions, onAdd, onEdit, onDelete }: TransactionListProps) {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<TransactionItem | null>(null);
+  const [filter, setFilter] = useState<"all" | "income" | "expense">("all");
 
   async function handleAddSubmit(data: { type: "income" | "expense"; amount: number; description: string; transaction_date: string }) {
     await onAdd(data);
@@ -28,6 +29,12 @@ export function TransactionList({ transactions, onAdd, onEdit, onDelete }: Trans
     setEditingTransaction(null);
   }
 
+  const filteredTransactions = transactions.filter((tx) => {
+    if (filter === "income") return tx.type === "income";
+    if (filter === "expense") return tx.type === "expense";
+    return true;
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -35,7 +42,45 @@ export function TransactionList({ transactions, onAdd, onEdit, onDelete }: Trans
           <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">Transaction History</h2>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">Manage your income and expenses.</p>
         </div>
-        <Button onClick={() => setIsAddOpen(true)}>+ Add Transaction</Button>
+        <div className="flex items-center gap-3">
+          {/* UI-based Transaction Filter */}
+          <div className="inline-flex rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-1 shadow-sm text-xs">
+            <button
+              type="button"
+              onClick={() => setFilter("all")}
+              className={`rounded px-3 py-1 font-medium transition-colors ${
+                filter === "all"
+                  ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                  : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              }`}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilter("income")}
+              className={`rounded px-3 py-1 font-medium transition-colors ${
+                filter === "income"
+                  ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                  : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              }`}
+            >
+              Income
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilter("expense")}
+              className={`rounded px-3 py-1 font-medium transition-colors ${
+                filter === "expense"
+                  ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                  : "text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              }`}
+            >
+              Expense
+            </button>
+          </div>
+          <Button onClick={() => setIsAddOpen(true)}>+ Add Transaction</Button>
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm">
@@ -50,14 +95,14 @@ export function TransactionList({ transactions, onAdd, onEdit, onDelete }: Trans
             </tr>
           </thead>
           <tbody>
-            {transactions.length === 0 ? (
+            {filteredTransactions.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                  No transactions found. Add your first transaction to get started.
+                  No transactions found for this filter.
                 </td>
               </tr>
             ) : (
-              transactions.map((tx) => (
+              filteredTransactions.map((tx) => (
                 <TransactionRow
                   key={tx.id}
                   transaction={tx}
