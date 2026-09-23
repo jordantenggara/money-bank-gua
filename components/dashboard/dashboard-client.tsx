@@ -2,12 +2,49 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { BalanceCard } from "@/components/dashboard/balance-card";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
 import { TransactionList } from "@/components/dashboard/transaction-list";
 import { TransactionItem } from "@/components/transactions/transaction-row";
 import { Toast } from "@/components/ui/toast";
+import type { ApiError, ApiSuccess, Transaction } from "@/lib/transactions/types";
+
+type TransactionFormData = {
+  type: "income" | "expense";
+  amount: number;
+  description: string;
+  transaction_date: string;
+};
+
+function toTransactionItem(transaction: Transaction): TransactionItem {
+  return {
+    id: transaction.id,
+    type: transaction.type,
+    amount: transaction.amount,
+    description: transaction.description,
+    transaction_date: transaction.transactionDate,
+  };
+}
+
+async function apiRequest<T>(url: string, init?: RequestInit): Promise<T | null> {
+  const response = await fetch(url, {
+    ...init,
+    credentials: "same-origin",
+    headers: {
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...init?.headers,
+    },
+  });
+
+  if (response.status === 204) return null;
+
+  const payload = (await response.json()) as ApiSuccess<T> | ApiError;
+  if (!response.ok || payload.error) {
+    throw new Error(payload.error?.message ?? "The request could not be completed.");
+  }
+
+  return payload.data;
+}
 
 type DashboardClientProps = {
   initialTransactions: TransactionItem[];
@@ -37,62 +74,69 @@ export function DashboardClient({ initialTransactions, initialHideBalance }: Das
   const balance = totalIncome - totalExpense;
 
   async function refreshTransactions() {
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("transactions")
-      .select("*")
-      .order("transaction_date", { ascending: false })
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      setToastMessage({ message: error.message, type: "error" });
-    } else {
-      setTransactions(data || []);
+    try {
+      const data = await apiRequest<Transaction[]>("/api/transactions");
+      setTransactions((data ?? []).map(toTransactionItem));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to load transactions.";
+      setToastMessage({ message, type: "error" });
     }
   }
 
-  async function handleAdd(data: { type: "income" | "expense"; amount: number; description: string; transaction_date: string }) {
-    const supabase = createClient();
-    const { error } = await supabase.from("transactions").insert([data]);
-
-    if (error) {
-      setToastMessage({ message: error.message, type: "error" });
-      throw new Error(error.message);
+  async function handleAdd(data: TransactionFormData) {
+    try {
+      await apiRequest<Transaction>("/api/transactions", {
+        method: "POST",
+        body: JSON.stringify({
+          type: data.type,
+          amount: data.amount,
+          description: data.description,
+          transactionDate: data.transaction_date,
+        }),
+      });
+      await refreshTransactions();
+      setToastMessage({ message: "Transaction added successfully.", type: "success" });
+      router.refresh();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to add transaction.";
+      setToastMessage({ message, type: "error" });
+      throw new Error(message);
     }
-
-    setToastMessage({ message: "Transaction added successfully.", type: "success" });
-    await refreshTransactions();
-    router.refresh();
   }
 
-  async function handleEdit(id: string, data: { type: "income" | "expense"; amount: number; description: string; transaction_date: string }) {
-    const supabase = createClient();
-    const { error } = await supabase.from("transactions").update(data).eq("id", id);
-
-    if (error) {
-      setToastMessage({ message: error.message, type: "error" });
-      throw new Error(error.message);
+  async function handleEdit(id: string, data: TransactionFormData) {
+    try {
+      await apiRequest<Transaction>(`/api/transactions/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          type: data.type,
+          amount: data.amount,
+          description: data.description,
+          transactionDate: data.transaction_date,
+        }),
+      });
+      await refreshTransactions();
+      setToastMessage({ message: "Transaction updated successfully.", type: "success" });
+      router.refresh();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update transaction.";
+      setToastMessage({ message, type: "error" });
+      throw new Error(message);
     }
-
-    setToastMessage({ message: "Transaction updated successfully.", type: "success" });
-    await refreshTransactions();
-    router.refresh();
   }
 
   async function handleDelete(id: string) {
     if (!confirm("Are you sure you want to delete this transaction?")) return;
 
-    const supabase = createClient();
-    const { error } = await supabase.from("transactions").delete().eq("id", id);
-
-    if (error) {
-      setToastMessage({ message: error.message, type: "error" });
-      return;
+    try {
+      await apiRequest(`/api/transactions/${id}`, { method: "DELETE" });
+      await refreshTransactions();
+      setToastMessage({ message: "Transaction deleted successfully.", type: "success" });
+      router.refresh();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to delete transaction.";
+      setToastMessage({ message, type: "error" });
     }
-
-    setToastMessage({ message: "Transaction deleted successfully.", type: "success" });
-    await refreshTransactions();
-    router.refresh();
   }
 
   return (
