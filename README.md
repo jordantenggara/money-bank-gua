@@ -51,7 +51,7 @@ Ruang lingkup versi awal:
 
 ```bash
 git clone <repository-url>
-cd duitku
+cd money-bank-gua
 ```
 
 ## Install
@@ -111,7 +111,7 @@ Jika script `typecheck` belum tersedia, tambahkan script berikut ke `package.jso
 # Project Structure (File Tree)
 
 ```text
-duitku/
+money-bank-gua/
 ├── app/
 │   ├── (auth)/
 │   │   ├── login/
@@ -266,7 +266,7 @@ The API must not return stack traces, database credentials, or information that 
 | SRS-007 | User can edit their own transaction. | - The edit form loads the selected transaction values.<br>- A valid update changes only the selected user's row.<br>- `updated_at` changes after a successful update.<br>- An invalid update is rejected without partially changing the row.<br>- A non-owned or nonexistent row is treated as not found. | P2 |
 | SRS-008 | User can delete their own transaction. | - The user can request deletion from the transaction history or edit view.<br>- A successful deletion removes the row from the database and current UI.<br>- A non-owned or nonexistent row cannot be deleted.<br>- A failed deletion leaves the existing transaction visible and shows an error. | P2 |
 | SRS-009 | User can view a financial summary. | - Dashboard displays total income, total expense, and balance.<br>- `balance = totalIncome - totalExpense`.<br>- Only the current user's rows contribute to the totals.<br>- The summary is refreshed after a successful create, edit, or delete operation.<br>- Amounts use one consistent currency and number format. | P2 |
-| SRS-010 | User can choose and persist a light or dark theme and also filtering also hide amount cookie | - The UI provides a light/dark toggle.<br>- The selected value is stored in a cookie named `duitku-theme`.<br>- Reloading the page preserves the selected theme, and hide/showed amount.<br>- Invalid or missing cookie values fall back to the default light theme, opened transaction.<br>- Theme selection does not require a database query. | P3 |
+| SRS-010 | User can choose and persist a light or dark theme and also filtering also hide amount cookie | - The UI provides a light/dark toggle.<br>- The selected value is stored in a cookie named `money-bank-gua-theme`.<br>- Reloading the page preserves the selected theme, and hide/showed amount.<br>- Invalid or missing cookie values fall back to the default light theme, opened transaction.<br>- Theme selection does not require a database query. | P3 |
 | SRS-011 | The application is usable on mobile and desktop screens. | - Login, registration, dashboard, transaction form, and history are usable at a minimum width of `320px`.<br>- Layout adapts without horizontal scrolling on supported mobile and desktop sizes.<br>- Form controls have labels, focus states, and readable validation messages.<br>- Destructive actions have a clear confirmation or an immediately visible recovery/error state. | P3 |
 
 ## Non-Functional Requirements
@@ -382,5 +382,5 @@ Database rules:
 - The API derives `user_id` from the session and never accepts it as an authoritative input field.
 - RLS must remain enabled in every environment, including local development.
 - The application does not need a duplicate public users table for the initial scope.
-- Theme preference is intentionally stored in the `duitku-theme` cookie, not in PostgreSQL.
+- Theme preference is intentionally stored in the `money-bank-gua-theme` cookie, not in PostgreSQL.
 
