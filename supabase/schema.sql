@@ -1,0 +1,5 @@
+-- Supabase Auth manages identities in auth.users. No application tables are
+-- required for the authentication-only starting point.
+--
+-- Future user-owned tables should reference auth.users(id) through a user_id
+-- column and enforce row ownership with RLS: auth.uid() = user_id.
