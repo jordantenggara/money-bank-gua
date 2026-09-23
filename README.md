@@ -185,13 +185,6 @@ duitku/
 └── tsconfig.json
 ```
 
-Ownership rule for this tree:
-
-- Programmer 1 owns authentication infrastructure, the Next.js Proxy, database migration, RLS, and shared API contracts.
-- Programmer 2 owns transaction validation, transaction services, dashboard aggregation, and transaction Route Handlers.
-- Programmer 3 owns pages, components, styling, theme cookie interaction, and client-side feedback.
-- A programmer must not rewrite another programmer's owned module merely to make a local implementation easier. Coordinate contract changes with the PM first.
-
 # API / Data Flow
 
 ## Authentication and session flow
@@ -273,7 +266,7 @@ The API must not return stack traces, database credentials, or information that 
 | SRS-007 | User can edit their own transaction. | - The edit form loads the selected transaction values.<br>- A valid update changes only the selected user's row.<br>- `updated_at` changes after a successful update.<br>- An invalid update is rejected without partially changing the row.<br>- A non-owned or nonexistent row is treated as not found. | P2 |
 | SRS-008 | User can delete their own transaction. | - The user can request deletion from the transaction history or edit view.<br>- A successful deletion removes the row from the database and current UI.<br>- A non-owned or nonexistent row cannot be deleted.<br>- A failed deletion leaves the existing transaction visible and shows an error. | P2 |
 | SRS-009 | User can view a financial summary. | - Dashboard displays total income, total expense, and balance.<br>- `balance = totalIncome - totalExpense`.<br>- Only the current user's rows contribute to the totals.<br>- The summary is refreshed after a successful create, edit, or delete operation.<br>- Amounts use one consistent currency and number format. | P2 |
-| SRS-010 | User can choose and persist a light or dark theme. | - The UI provides a light/dark toggle.<br>- The selected value is stored in a cookie named `duitku-theme`.<br>- Reloading the page preserves the selected theme.<br>- Invalid or missing cookie values fall back to the default light theme.<br>- Theme selection does not require a database query. | P3 |
+| SRS-010 | User can choose and persist a light or dark theme and also filtering also hide amount cookie | - The UI provides a light/dark toggle.<br>- The selected value is stored in a cookie named `duitku-theme`.<br>- Reloading the page preserves the selected theme, and hide/showed amount.<br>- Invalid or missing cookie values fall back to the default light theme, opened transaction.<br>- Theme selection does not require a database query. | P3 |
 | SRS-011 | The application is usable on mobile and desktop screens. | - Login, registration, dashboard, transaction form, and history are usable at a minimum width of `320px`.<br>- Layout adapts without horizontal scrolling on supported mobile and desktop sizes.<br>- Form controls have labels, focus states, and readable validation messages.<br>- Destructive actions have a clear confirmation or an immediately visible recovery/error state. | P3 |
 
 ## Non-Functional Requirements
