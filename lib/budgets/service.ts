@@ -1,92 +1,218 @@
-import { MonthlyBudgetSummary, BudgetStatus } from "./types";
+import type {
+  MonthlyBudget,
+  MonthlyBudgetSummary,
+  SetMonthlyBudgetInput,
+} from "./types.ts";
+import { BudgetServiceError } from "./types.ts";
 
-export function getMonthDateRange(monthStr: string) {
-  const [year, month] = monthStr.split("-").map(Number);
-  const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
-  
-  let nextYear = year;
-  let nextMonth = month + 1;
-  if (nextMonth > 12) {
-    nextMonth = 1;
-    nextYear += 1;
+type MoneyValue = number | string;
+
+export type BudgetRepository = {
+  upsertBudget(userId: string, budgetMonth: string, amount: number): Promise<void>;
+  findBudgetAmount(userId: string, budgetMonth: string): Promise<MoneyValue | null>;
+  listExpenseAmounts(
+    userId: string,
+    startDate: string,
+    endDate: string,
+  ): Promise<MoneyValue[]>;
+};
+
+export type BudgetContext = {
+  userId: string;
+  repository: BudgetRepository;
+};
+
+export type BudgetContextFactory = () => Promise<BudgetContext>;
+
+function toCents(value: MoneyValue): number {
+  const amount = Number(value);
+
+  if (!Number.isFinite(amount)) {
+    throw new BudgetServiceError(
+      "INTERNAL_ERROR",
+      "The budget request could not be completed.",
+    );
   }
-  const endDate = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`;
 
-  return { startDate, endDate };
+  return Math.round(amount * 100);
 }
 
-export function computeBudgetStatus(totalBudget: number | null, totalExpense: number): BudgetStatus {
-  if (totalBudget === null || totalBudget <= 0) {
-    return "UNSET";
-  }
-  const percentage = (totalExpense / totalBudget) * 100;
-  if (percentage < 75) return "SAFE";
-  if (percentage < 100) return "WARNING";
-  if (percentage === 100) return "LIMIT";
-  return "OVER";
+function fromCents(value: number): number {
+  return Number((value / 100).toFixed(2));
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getMonthlyBudgetSummary(supabase: any, userId: string, monthStr: string): Promise<MonthlyBudgetSummary> {
-  const { startDate, endDate } = getMonthDateRange(monthStr);
+export function normalizeBudgetMonth(month: string): string {
+  return `${month}-01`;
+}
 
-  // Fetch budget for user and month
-  const { data: budgetData } = await supabase
-    .from("monthly_budgets")
-    .select("amount")
-    .eq("user_id", userId)
-    .eq("budget_month", startDate)
-    .maybeSingle();
+export function getNextBudgetMonth(month: string): string {
+  const year = Number(month.slice(0, 4));
+  const monthNumber = Number(month.slice(5, 7));
+  const nextYear = monthNumber === 12 ? year + 1 : year;
+  const nextMonth = monthNumber === 12 ? 1 : monthNumber + 1;
 
-  const totalBudget = budgetData ? Number(budgetData.amount) : null;
+  return `${String(nextYear).padStart(4, "0")}-${String(nextMonth).padStart(2, "0")}-01`;
+}
 
-  // Fetch expense transactions for user in month
-  const { data: transactions } = await supabase
-    .from("transactions")
-    .select("amount")
-    .eq("user_id", userId)
-    .eq("type", "expense")
-    .gte("transaction_date", startDate)
-    .lt("transaction_date", endDate);
+export function calculateMonthlyBudgetSummary(
+  month: string,
+  budgetAmount: MoneyValue | null,
+  expenseAmounts: MoneyValue[],
+): MonthlyBudgetSummary {
+  const totalExpenseCents = expenseAmounts.reduce<number>(
+    (total, amount) => total + toCents(amount),
+    0,
+  );
+  const totalExpense = fromCents(totalExpenseCents);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const totalExpense = (transactions || []).reduce((sum: number, tx: any) => sum + Number(tx.amount), 0);
+  if (budgetAmount === null) {
+    return {
+      month,
+      totalBudget: null,
+      totalExpense,
+      remainingBudget: null,
+      usagePercentage: null,
+      status: "UNSET",
+    };
+  }
 
-  const remainingBudget = totalBudget !== null ? totalBudget - totalExpense : null;
-  const usagePercentage = totalBudget !== null && totalBudget > 0 ? (totalExpense / totalBudget) * 100 : null;
-  const status = computeBudgetStatus(totalBudget, totalExpense);
+  const totalBudgetCents = toCents(budgetAmount);
+  if (totalBudgetCents <= 0) {
+    throw new BudgetServiceError(
+      "INTERNAL_ERROR",
+      "The budget request could not be completed.",
+    );
+  }
+
+  let status: MonthlyBudgetSummary["status"];
+  if (totalExpenseCents * 4 < totalBudgetCents * 3) {
+    status = "SAFE";
+  } else if (totalExpenseCents < totalBudgetCents) {
+    status = "WARNING";
+  } else if (totalExpenseCents === totalBudgetCents) {
+    status = "LIMIT";
+  } else {
+    status = "OVER";
+  }
 
   return {
-    month: monthStr,
-    totalBudget,
+    month,
+    totalBudget: fromCents(totalBudgetCents),
     totalExpense,
-    remainingBudget,
-    usagePercentage,
+    remainingBudget: fromCents(totalBudgetCents - totalExpenseCents),
+    usagePercentage: Number(
+      ((totalExpenseCents / totalBudgetCents) * 100).toFixed(2),
+    ),
     status,
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function upsertMonthlyBudget(supabase: any, userId: string, monthStr: string, amount: number) {
-  const { startDate } = getMonthDateRange(monthStr);
+export function requireAuthenticatedBudgetUserId(
+  data: { claims?: { sub?: unknown } } | null,
+  error: unknown,
+): string {
+  const userId = data?.claims?.sub;
 
-  const { data, error } = await supabase
-    .from("monthly_budgets")
-    .upsert(
-      {
-        user_id: userId,
-        budget_month: startDate,
-        amount,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id,budget_month" }
-    )
-    .select()
-    .single();
-
-  if (error) {
-    throw new Error(error.message);
+  if (error || typeof userId !== "string" || !userId) {
+    throw new BudgetServiceError(
+      "UNAUTHENTICATED",
+      "Authentication is required.",
+    );
   }
 
-  return data;
+  return userId;
 }
+
+function throwDatabaseError(
+  operation: string,
+  error: { code?: string } | null,
+): never {
+  console.error("Budget database operation failed.", {
+    operation,
+    code: error?.code ?? "UNKNOWN",
+  });
+  throw new BudgetServiceError(
+    "INTERNAL_ERROR",
+    "The budget request could not be completed.",
+  );
+}
+
+async function getAuthenticatedBudgetContext(): Promise<BudgetContext> {
+  const { createClient } = await import("@/lib/supabase/server");
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.getClaims();
+  const userId = requireAuthenticatedBudgetUserId(data, error);
+
+  const repository: BudgetRepository = {
+    async upsertBudget(ownerId, budgetMonth, amount) {
+      const { error: upsertError } = await supabase
+        .from("monthly_budgets")
+        .upsert(
+          {
+            user_id: ownerId,
+            budget_month: budgetMonth,
+            amount,
+          },
+          { onConflict: "user_id,budget_month" },
+        );
+
+      if (upsertError) throwDatabaseError("upsert", upsertError);
+    },
+
+    async findBudgetAmount(ownerId, budgetMonth) {
+      const { data: budget, error: budgetError } = await supabase
+        .from("monthly_budgets")
+        .select("amount")
+        .eq("user_id", ownerId)
+        .eq("budget_month", budgetMonth)
+        .maybeSingle();
+
+      if (budgetError) throwDatabaseError("find", budgetError);
+      return (budget?.amount as MoneyValue | undefined) ?? null;
+    },
+
+    async listExpenseAmounts(ownerId, startDate, endDate) {
+      const { data: expenses, error: expenseError } = await supabase
+        .from("transactions")
+        .select("amount")
+        .eq("user_id", ownerId)
+        .eq("type", "expense")
+        .gte("transaction_date", startDate)
+        .lt("transaction_date", endDate);
+
+      if (expenseError) throwDatabaseError("aggregate-expenses", expenseError);
+      return (expenses ?? []).map((row) => row.amount as MoneyValue);
+    },
+  };
+
+  return { userId, repository };
+}
+
+export function createBudgetOperations(getContext: BudgetContextFactory) {
+  return {
+    async setMonthlyBudget(input: SetMonthlyBudgetInput): Promise<MonthlyBudget> {
+      const { userId, repository } = await getContext();
+      const budgetMonth = normalizeBudgetMonth(input.month);
+
+      await repository.upsertBudget(userId, budgetMonth, input.amount);
+      return { month: input.month, amount: input.amount };
+    },
+
+    async getMonthlyBudgetSummary(month: string): Promise<MonthlyBudgetSummary> {
+      const { userId, repository } = await getContext();
+      const startDate = normalizeBudgetMonth(month);
+      const endDate = getNextBudgetMonth(month);
+      const [budgetAmount, expenseAmounts] = await Promise.all([
+        repository.findBudgetAmount(userId, startDate),
+        repository.listExpenseAmounts(userId, startDate, endDate),
+      ]);
+
+      return calculateMonthlyBudgetSummary(month, budgetAmount, expenseAmounts);
+    },
+  };
+}
+
+const budgetOperations = createBudgetOperations(getAuthenticatedBudgetContext);
+
+export const setMonthlyBudget = budgetOperations.setMonthlyBudget;
+export const getMonthlyBudgetSummary = budgetOperations.getMonthlyBudgetSummary;

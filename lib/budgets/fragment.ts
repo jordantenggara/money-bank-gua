@@ -1,49 +1,95 @@
-import { MonthlyBudgetSummary } from "./types";
+import type { MonthlyBudgetSummary } from "./types.ts";
+type FeedbackKind = "success" | "error";
 
-export function renderBudgetSummaryFragment(summary: MonthlyBudgetSummary): string {
-  const formatCurrency = (amount: number | null) => {
-    if (amount === null) return "—";
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
+const currencyFormatter = new Intl.NumberFormat("id-ID", {
+  style: "currency",
+  currency: "IDR",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
 
-  const usageText = summary.usagePercentage !== null ? `${summary.usagePercentage.toFixed(2).replace(".", ",")}%` : "—";
-  const status = summary.status;
+const percentageFormatter = new Intl.NumberFormat("id-ID", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
 
-  return `
-    <div id="budget-summary-content" class="budget-summary rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm space-y-4" data-budget-month="${summary.month}" data-budget-status="${status}">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <h3 class="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Monthly Budget (${summary.month})</h3>
-      </div>
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => {
+    const entities: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;",
+    };
+    return entities[character];
+  });
+}
 
-      <dl class="budget-summary__totals grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div class="budget-summary__item rounded-lg border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 p-4">
-          <dt class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Total budget</dt>
-          <dd id="budget-total" class="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">${formatCurrency(summary.totalBudget)}</dd>
-        </div>
-        <div class="budget-summary__item rounded-lg border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 p-4">
-          <dt class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Total expense</dt>
-          <dd id="budget-expense" class="mt-1 text-xl font-bold text-red-600 dark:text-red-400">${formatCurrency(summary.totalExpense)}</dd>
-        </div>
-        <div class="budget-summary__item rounded-lg border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 p-4">
-          <dt class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Remaining budget</dt>
-          <dd id="budget-remaining" class="mt-1 text-xl font-bold ${summary.remainingBudget !== null && summary.remainingBudget < 0 ? "text-red-600 dark:text-red-400" : "text-zinc-900 dark:text-zinc-100"}">
-            ${formatCurrency(summary.remainingBudget)}
-          </dd>
-        </div>
-      </dl>
+function formatCurrency(value: number): string {
+  return currencyFormatter.format(value);
+}
 
-      <div id="budget-usage-indicator" class="budget-summary__indicator rounded-lg border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2" data-budget-status="${status}">
-        <p class="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          Usage: <span id="budget-usage" class="font-semibold">${usageText}</span>
-        </p>
-        <p class="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          Status: <strong id="budget-status" class="uppercase">${status}</strong>
-        </p>
-      </div>
-    </div>
-  `;
+function renderSummaryItem(id: string, label: string, value: string): string {
+  return `<div class="budget-summary__item"><dt>${label}</dt><dd id="${id}">${value}</dd></div>`;
+}
+
+export function renderBudgetSummary(summary: MonthlyBudgetSummary): string {
+  const hasBudget = summary.totalBudget !== null;
+  const budget = hasBudget
+    ? escapeHtml(formatCurrency(summary.totalBudget as number))
+    : "Belum diatur";
+  const expense = escapeHtml(formatCurrency(summary.totalExpense));
+  const remaining =
+    summary.remainingBudget === null
+      ? "&mdash;"
+      : escapeHtml(formatCurrency(summary.remainingBudget));
+  const usage =
+    summary.usagePercentage === null
+      ? "&mdash;"
+      : `${escapeHtml(percentageFormatter.format(summary.usagePercentage))}%`;
+
+  return `<div id="budget-summary-content" class="budget-summary" data-budget-month="${escapeHtml(summary.month)}" data-budget-status="${summary.status}">
+  <dl class="budget-summary__totals">
+    ${renderSummaryItem("budget-total", "Total budget", budget)}
+    ${renderSummaryItem("budget-expense", "Total expense", expense)}
+    ${renderSummaryItem("budget-remaining", "Remaining budget", remaining)}
+  </dl>
+  <div id="budget-usage-indicator" class="budget-summary__indicator" data-budget-status="${summary.status}">
+    <p>Usage: <span id="budget-usage">${usage}</span></p>
+    <p>Status: <strong id="budget-status">${summary.status}</strong></p>
+  </div>
+</div>`;
+}
+
+export function renderBudgetFeedback(
+  kind: FeedbackKind,
+  message: string,
+  fieldErrors?: Record<string, string[]>,
+): string {
+  const errors = fieldErrors
+    ? Object.entries(fieldErrors).flatMap(([field, messages]) =>
+        messages.map(
+          (item) =>
+            `<li data-budget-field="${escapeHtml(field)}">${escapeHtml(item)}</li>`,
+        ),
+      )
+    : [];
+  const errorList = errors.length
+    ? `<ul class="budget-feedback__errors">${errors.join("")}</ul>`
+    : "";
+  const role = kind === "error" ? "alert" : "status";
+
+  return `<div id="budget-form-feedback-message" class="budget-feedback budget-feedback--${kind}" data-budget-feedback="${kind}" role="${role}"><p>${escapeHtml(message)}</p>${errorList}</div>`;
+}
+
+export function htmlResponse(
+  html: string,
+  init: { status?: number; headers?: HeadersInit } = {},
+): Response {
+  const headers = new Headers(init.headers);
+  headers.set("Content-Type", "text/html; charset=utf-8");
+  headers.set("Cache-Control", "private, no-store");
+
+  return new Response(html, { status: init.status ?? 200, headers });
 }

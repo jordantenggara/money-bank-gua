@@ -1,23 +1,9 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { upsertMonthlyBudget, getMonthlyBudgetSummary } from "@/lib/budgets/service";
-import { setBudgetSchema } from "@/lib/budgets/schemas";
-import { renderBudgetSummaryFragment } from "@/lib/budgets/fragment";
+import { setMonthlyBudget, getMonthlyBudgetSummary } from "@/lib/budgets/service";
+import { renderBudgetSummary, renderBudgetFeedback, htmlResponse } from "@/lib/budgets/fragment";
+import { monthlyBudgetFormSchema } from "@/lib/budgets/schemas";
+import { BudgetServiceError } from "@/lib/budgets/types";
 
 export async function PUT(request: Request) {
-  const supabase = await createClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return new NextResponse(
-      `<div id="budget-form-feedback-message" class="budget-feedback budget-feedback--error" data-budget-feedback="error" role="status"><p>Unauthorized. Please log in.</p></div>`,
-      {
-        status: 401,
-        headers: { "Content-Type": "text/html" },
-      }
-    );
-  }
-
   let formData;
   try {
     const contentType = request.headers.get("content-type") || "";
@@ -32,56 +18,50 @@ export async function PUT(request: Request) {
       formData = await request.json();
     }
   } catch {
-    return new NextResponse(
-      `<div id="budget-form-feedback-message" class="budget-feedback budget-feedback--error" data-budget-feedback="error" role="status"><p>Invalid request body.</p></div>`,
-      {
-        status: 400,
-        headers: { "Content-Type": "text/html" },
-      }
-    );
+    const errorHtml = renderBudgetFeedback("error", "Invalid request body.");
+    return htmlResponse(errorHtml, { status: 400 });
   }
 
-  const parsed = setBudgetSchema.safeParse(formData);
+  const parsed = monthlyBudgetFormSchema.safeParse(formData);
   if (!parsed.success) {
-    const errorMessage = parsed.error.issues.map((i) => i.message).join(", ");
-    return new NextResponse(
-      `<div id="budget-form-feedback-message" class="budget-feedback budget-feedback--error" data-budget-feedback="error" role="status"><p>Validation error: ${errorMessage}</p></div>`,
-      {
-        status: 422,
-        headers: { "Content-Type": "text/html" },
-      }
-    );
+    const fieldErrors: Record<string, string[]> = {};
+    for (const issue of parsed.error.issues) {
+      const field = issue.path[0]?.toString() || "form";
+      if (!fieldErrors[field]) fieldErrors[field] = [];
+      fieldErrors[field].push(issue.message);
+    }
+    const errorHtml = renderBudgetFeedback("error", "Validation error", fieldErrors);
+    return htmlResponse(errorHtml, { status: 422 });
   }
 
   try {
     const { month, amount } = parsed.data;
-    await upsertMonthlyBudget(supabase, user.id, month, amount);
+    await setMonthlyBudget({ month, amount });
 
-    const summary = await getMonthlyBudgetSummary(supabase, user.id, month);
-    const html = renderBudgetSummaryFragment(summary);
+    const summary = await getMonthlyBudgetSummary(month);
+    const summaryHtml = renderBudgetSummary(summary);
+    const feedbackHtml = renderBudgetFeedback("success", `Budget for ${month} was saved successfully.`);
 
-    const feedbackHtml = `
-      <div id="budget-form-feedback-message" class="budget-feedback budget-feedback--success" data-budget-feedback="success" role="status">
-        <p>Budget for ${month} was saved successfully.</p>
+    const responseHtml = `
+      <div id="budget-form-feedback-message">
+        ${feedbackHtml}
       </div>
-      ${html}
+      ${summaryHtml}
     `;
 
-    return new NextResponse(feedbackHtml, {
+    return htmlResponse(responseHtml, {
       status: 200,
       headers: {
-        "Content-Type": "text/html",
         "HX-Trigger": "budgetChanged",
       },
     });
   } catch (err: unknown) {
+    if (err instanceof BudgetServiceError && err.code === "UNAUTHENTICATED") {
+      const errorHtml = renderBudgetFeedback("error", "Authentication is required.");
+      return htmlResponse(errorHtml, { status: 401 });
+    }
     const message = err instanceof Error ? err.message : "Internal error";
-    return new NextResponse(
-      `<div id="budget-form-feedback-message" class="budget-feedback budget-feedback--error" data-budget-feedback="error" role="status"><p>Failed to update budget: ${message}</p></div>`,
-      {
-        status: 500,
-        headers: { "Content-Type": "text/html" },
-      }
-    );
+    const errorHtml = renderBudgetFeedback("error", message);
+    return htmlResponse(errorHtml, { status: 500 });
   }
 }

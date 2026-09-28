@@ -4,7 +4,7 @@ import { DashboardClient } from "@/components/dashboard/dashboard-client";
 import { BudgetPanel } from "@/components/budget/budget-panel";
 import { HtmxLoader } from "@/components/htmx/htmx-loader";
 import { getMonthlyBudgetSummary } from "@/lib/budgets/service";
-import { renderBudgetSummaryFragment } from "@/lib/budgets/fragment";
+import { renderBudgetSummary } from "@/lib/budgets/fragment";
 import { cookies } from "next/headers";
 
 export default async function DashboardPage() {
@@ -25,8 +25,8 @@ export default async function DashboardPage() {
     .order("created_at", { ascending: false });
 
   const currentMonth = new Date().toISOString().slice(0, 7);
-  const initialSummary = await getMonthlyBudgetSummary(supabase, user.id, currentMonth);
-  const initialSummaryHtml = renderBudgetSummaryFragment(initialSummary);
+  const initialSummary = await getMonthlyBudgetSummary(currentMonth);
+  const initialSummaryHtml = renderBudgetSummary(initialSummary);
 
   return (
     <div className="space-y-10">
