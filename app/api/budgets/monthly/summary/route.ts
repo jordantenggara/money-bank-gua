@@ -1,43 +1,55 @@
-import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { getMonthlyBudgetSummary } from "@/lib/budgets/service";
-import { renderBudgetSummaryFragment } from "@/lib/budgets/fragment";
-import { monthSchema } from "@/lib/budgets/schemas";
+import {
+  htmlResponse,
+  renderBudgetFeedback,
+  renderBudgetSummary,
+} from "../../../../../lib/budgets/fragment.ts";
+import { budgetMonthSchema } from "../../../../../lib/budgets/schemas.ts";
+import { getMonthlyBudgetSummary } from "../../../../../lib/budgets/service.ts";
+import { BudgetServiceError } from "../../../../../lib/budgets/types.ts";
+import type { MonthlyBudgetSummary } from "../../../../../lib/budgets/types.ts";
 
-export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const monthParam = url.searchParams.get("month") || new Date().toISOString().slice(0, 7);
+type GetSummary = (month: string) => Promise<MonthlyBudgetSummary>;
 
-  const parsedMonth = monthSchema.safeParse(monthParam);
-  if (!parsedMonth.success) {
-    return new NextResponse("<div class='p-3 text-sm text-red-600 bg-red-50 rounded'>Invalid month format.</div>", {
-      status: 400,
-      headers: { "Content-Type": "text/html" },
-    });
+function serviceErrorResponse(error: unknown) {
+  if (error instanceof BudgetServiceError) {
+    const status = error.code === "UNAUTHENTICATED" ? 401 : 500;
+    return htmlResponse(renderBudgetFeedback("error", error.message), { status });
   }
 
-  const supabase = await createClient();
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return new NextResponse("<div class='p-3 text-sm text-red-600 bg-red-50 rounded'>Unauthorized. Please log in.</div>", {
-      status: 401,
-      headers: { "Content-Type": "text/html" },
-    });
-  }
-
-  try {
-    const summary = await getMonthlyBudgetSummary(supabase, user.id, parsedMonth.data);
-    const html = renderBudgetSummaryFragment(summary);
-    return new NextResponse(html, {
-      status: 200,
-      headers: { "Content-Type": "text/html" },
-    });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Internal error";
-    return new NextResponse(`<div class='p-3 text-sm text-red-600 bg-red-50 rounded'>Error: ${message}</div>`, {
-      status: 500,
-      headers: { "Content-Type": "text/html" },
-    });
-  }
+  console.error("Unexpected monthly budget summary failure.", {
+    errorType: error instanceof Error ? error.name : typeof error,
+  });
+  return htmlResponse(
+    renderBudgetFeedback(
+      "error",
+      "The budget summary could not be loaded.",
+    ),
+    { status: 500 },
+  );
 }
+
+export function createGetMonthlyBudgetSummaryHandler(
+  loadSummary: GetSummary = getMonthlyBudgetSummary,
+) {
+  return async function GET(request: Request) {
+    const month = new URL(request.url).searchParams.get("month");
+    const parsed = budgetMonthSchema.safeParse(month);
+
+    if (!parsed.success) {
+      return htmlResponse(
+        renderBudgetFeedback("error", parsed.error.issues[0].message, {
+          month: parsed.error.issues.map((issue) => issue.message),
+        }),
+        { status: 422 },
+      );
+    }
+
+    try {
+      return htmlResponse(renderBudgetSummary(await loadSummary(parsed.data)));
+    } catch (error) {
+      return serviceErrorResponse(error);
+    }
+  };
+}
+
+export const GET = createGetMonthlyBudgetSummaryHandler();
