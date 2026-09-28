@@ -138,7 +138,7 @@ function throwDatabaseError(
 }
 
 async function getAuthenticatedBudgetContext(): Promise<BudgetContext> {
-  const { createClient } = await import("@/lib/supabase/server");
+  const { createClient } = await import("../supabase/server.ts");
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getClaims();
   const userId = requireAuthenticatedBudgetUserId(data, error);

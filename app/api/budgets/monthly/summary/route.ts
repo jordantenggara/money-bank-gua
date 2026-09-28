@@ -1,29 +1,55 @@
-import { getMonthlyBudgetSummary } from "@/lib/budgets/service";
-import { renderBudgetSummary, renderBudgetFeedback, htmlResponse } from "@/lib/budgets/fragment";
-import { budgetMonthSchema } from "@/lib/budgets/schemas";
-import { BudgetServiceError } from "@/lib/budgets/types";
+import {
+  htmlResponse,
+  renderBudgetFeedback,
+  renderBudgetSummary,
+} from "../../../../../lib/budgets/fragment.ts";
+import { budgetMonthSchema } from "../../../../../lib/budgets/schemas.ts";
+import { getMonthlyBudgetSummary } from "../../../../../lib/budgets/service.ts";
+import { BudgetServiceError } from "../../../../../lib/budgets/types.ts";
+import type { MonthlyBudgetSummary } from "../../../../../lib/budgets/types.ts";
 
-export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const monthParam = url.searchParams.get("month") || new Date().toISOString().slice(0, 7);
+type GetSummary = (month: string) => Promise<MonthlyBudgetSummary>;
 
-  const parsedMonth = budgetMonthSchema.safeParse(monthParam);
-  if (!parsedMonth.success) {
-    const errorHtml = renderBudgetFeedback("error", "Invalid month format. Expected YYYY-MM.");
-    return htmlResponse(errorHtml, { status: 400 });
+function serviceErrorResponse(error: unknown) {
+  if (error instanceof BudgetServiceError) {
+    const status = error.code === "UNAUTHENTICATED" ? 401 : 500;
+    return htmlResponse(renderBudgetFeedback("error", error.message), { status });
   }
 
-  try {
-    const summary = await getMonthlyBudgetSummary(parsedMonth.data);
-    const html = renderBudgetSummary(summary);
-    return htmlResponse(html, { status: 200 });
-  } catch (err: unknown) {
-    if (err instanceof BudgetServiceError && err.code === "UNAUTHENTICATED") {
-      const errorHtml = renderBudgetFeedback("error", "Authentication is required.");
-      return htmlResponse(errorHtml, { status: 401 });
-    }
-    const message = err instanceof Error ? err.message : "Internal error";
-    const errorHtml = renderBudgetFeedback("error", message);
-    return htmlResponse(errorHtml, { status: 500 });
-  }
+  console.error("Unexpected monthly budget summary failure.", {
+    errorType: error instanceof Error ? error.name : typeof error,
+  });
+  return htmlResponse(
+    renderBudgetFeedback(
+      "error",
+      "The budget summary could not be loaded.",
+    ),
+    { status: 500 },
+  );
 }
+
+export function createGetMonthlyBudgetSummaryHandler(
+  loadSummary: GetSummary = getMonthlyBudgetSummary,
+) {
+  return async function GET(request: Request) {
+    const month = new URL(request.url).searchParams.get("month");
+    const parsed = budgetMonthSchema.safeParse(month);
+
+    if (!parsed.success) {
+      return htmlResponse(
+        renderBudgetFeedback("error", parsed.error.issues[0].message, {
+          month: parsed.error.issues.map((issue) => issue.message),
+        }),
+        { status: 422 },
+      );
+    }
+
+    try {
+      return htmlResponse(renderBudgetSummary(await loadSummary(parsed.data)));
+    } catch (error) {
+      return serviceErrorResponse(error);
+    }
+  };
+}
+
+export const GET = createGetMonthlyBudgetSummaryHandler();
