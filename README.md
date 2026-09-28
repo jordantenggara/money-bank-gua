@@ -555,3 +555,4 @@ Database rules:
 - Budget indicator status is derived data and is not stored as a database column.
 - `totalExpense`, `remainingBudget`, and `usagePercentage` are calculated from current persisted data rather than stored redundantly.
 - Theme preference remains stored in the `money-bank-gua-theme` cookie, not in PostgreSQL.
+
