@@ -24,3 +24,56 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Budget UI Styling for Programmer 2 Fragment Classes */
+.budget-summary {
+  @apply rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 shadow-sm space-y-4;
+}
+
+.budget-summary__totals {
+  @apply grid grid-cols-1 gap-4 sm:grid-cols-3;
+}
+
+.budget-summary__item {
+  @apply rounded-lg border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 p-4;
+}
+
+.budget-summary__item dt {
+  @apply text-xs font-medium text-zinc-500 dark:text-zinc-400;
+}
+
+.budget-summary__item dd {
+  @apply mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100;
+}
+
+.budget-summary__indicator {
+  @apply rounded-lg border border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-300;
+}
+
+.budget-summary__indicator[data-budget-status="SAFE"] {
+  @apply bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/50 text-emerald-900 dark:text-emerald-200;
+}
+
+.budget-summary__indicator[data-budget-status="WARNING"] {
+  @apply bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/50 text-amber-900 dark:text-amber-200;
+}
+
+.budget-summary__indicator[data-budget-status="LIMIT"] {
+  @apply bg-orange-50 dark:bg-orange-950/40 border-orange-200 dark:border-orange-800/50 text-orange-900 dark:text-orange-200;
+}
+
+.budget-summary__indicator[data-budget-status="OVER"] {
+  @apply bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800/50 text-red-900 dark:text-red-200;
+}
+
+.budget-feedback {
+  @apply rounded-md p-3 text-sm shadow-sm mb-4 border;
+}
+
+.budget-feedback--success {
+  @apply bg-emerald-50 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border-emerald-300 dark:border-emerald-800;
+}
+
+.budget-feedback--error {
+  @apply bg-red-50 dark:bg-red-950 text-red-800 dark:text-red-200 border-red-300 dark:border-red-800;
+}

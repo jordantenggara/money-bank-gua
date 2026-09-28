@@ -1,5 +1,4 @@
 import type { MonthlyBudgetSummary } from "./types.ts";
-
 type FeedbackKind = "success" | "error";
 
 const currencyFormatter = new Intl.NumberFormat("id-ID", {
